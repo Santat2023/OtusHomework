@@ -1,0 +1,18 @@
+@startuml
+!include <C4/C4_Container>
+Person(professor, "Профессор", "сотрудник университета,\nпрофессор")
+Person(student, "Студент", "студент университета")
+Person(admin, "Администратор", "сотрудник университета,\nадминистратор")
+System_Boundary(c1, "Система Проверки заданий") {
+    Container(webApp, "Web application", "Веб приложение предоставляюещее некий UI для студентов, профессоров и администраторов")
+    Container(backend, "Backend", "Серверное приложение на котором гоняются тесты по выполненным заданиям")
+    Container(authServer, "Auth Server", "Некий сервер для аутентификации и авторизации пользователей")
+    ContainerDb(db, "Database", "Какая то SQL база данных", "Хранит всю информацию по заданиям")
+}
+Rel(admin, webApp, "Настраивает права", "HTTPS")
+Rel(professor, webApp, "Загружает требования к заданиям,выставляет оценки", "HTTPS")
+Rel(student, webApp, "Загружает исходный код по заданиям, смотрит оценки", "HTTPS")
+Rel_R(backend, db, "Reads/Writes")
+Rel_L(webApp, authServer, "Авторизует пользователей")
+Rel_R(webApp, backend, "Uses")
+@enduml
