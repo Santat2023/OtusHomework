@@ -5,4 +5,4 @@
 Функциональная декомпозиция ([тут](../SecondHomeWork/homework.md)).\
 Взаимодействие сервисов ([тут](../ThirdHomeWork/homework.md)).
 ## Итоговые диаграммы
-![image](../FourthHomeWork/C4_ERD_Deployment_task_checker_final.jpeg)
+![image](../FourthHomeWork/C4_ERD_Deployment_task_checker_final.jpg)
