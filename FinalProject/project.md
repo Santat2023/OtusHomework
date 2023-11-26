@@ -138,48 +138,42 @@ Us-3: Отображение заданий/оценок:
 **ER диаграмма слоя данных**![](../FinalProject/C4_ERD_Deployment_task_checker_final-ER%20diagram.jpg)
 
 ## Сценарии
-### Просмотр (получения) списка задач
+### Просмотр (получения) списка задач/работ
 ```mermaid
 sequenceDiagram
     participant USR as User Service
     participant API as API Proxy Service
     participant Backend as Backend Service
+    participant DB as PostgresDb
     USR->>API: GET request
     activate API
     API->>Backend: data stream
     activate Backend
+    Backend->>DB: data stream
+    activate DB
+    DB-->>Backend: OK
+    deactivate DB
     Backend-->>API: OK
     deactivate Backend
     API-->>USR: OK Response
     deactivate API
 ```
 
-### Просмотр (получения) списка работ
+### Cоздание/Редактирование задачи/работы
 ```mermaid
 sequenceDiagram
     participant USR as User Service
     participant API as API Proxy Service
     participant Backend as Backend Service
+    participant DB as PostgresDb
     USR->>API: GET request
     activate API
     API->>Backend: data stream
     activate Backend
-    Backend-->>API: OK
-    deactivate Backend
-    API-->>USR: OK Response
-    deactivate API
-```
-
-### Cоздание задачи/Редактирование задачи
-```mermaid
-sequenceDiagram
-    participant USR as User Service
-    participant API as API Proxy Service
-    participant Backend as Backend Service
-    USR->>API: POST request
-    activate API
-    API->>Backend: data stream
-    activate Backend
+    Backend->>DB: data stream
+    activate DB
+    DB-->>Backend: OK
+    deactivate DB
     Backend-->>API: OK
     deactivate Backend
     API-->>USR: OK Response
@@ -188,7 +182,7 @@ sequenceDiagram
 
 #### Оценка атрибутов качества
 
-Для всех 3х сценариев выше выбрано простейшее решение через REST API и синхронное взаимодействие.
+Для всех сценариев выше выбрано простейшее решение через REST API и синхронное взаимодействие.
 
 Надежность: 
 Сценарии сбоев
@@ -196,7 +190,7 @@ sequenceDiagram
 - долгий ответ бэка
 
 
-Можно купировать через техники балансировки; graceful Degradation; progressive Enhancement; throttling; retry&timeout;)
+Можно купировать через техники балансировки; retry&timeout;)
 
 
 Производительность: 
@@ -211,72 +205,99 @@ sequenceDiagram
 - изменения на стороне бэка
 изменения затронут только backend service
 
-### Создание работы
+### Отправка результатов оценок в LMS
 
 ```mermaid
 sequenceDiagram
-    participant USR as User Service
-    participant S3 as Object storage Service
-    participant API as API Proxy Service
-    participant Backend as Backend Service
-    USR->>S3: Загрузка работы в обьектное хранилище
-    activate S3
-    S3-->>USR: OK , возвращает ID загруженного обьекта
-    deactivate S3
-    USR->>API: POST request
-    activate API
-    API->>Backend: data stream
+    participant Db as PostgresDb
+    participant Backend as Backend Service Scheduler
+    participant Kafka as Kafka
+    participant Proxy as Proxy Service Adapter
+    participant LMS as LMS
+
+    Backend ->> Db: получения списка оценок к отправке
     activate Backend
-    Backend-->>API: OK
+    activate Db
+    Db -->> Backend: ОК
+    deactivate Db
+
+    Backend ->> Kafka: отправка сообщений
+    Kafka -->> Backend: OK
     deactivate Backend
-    API-->>USR: OK Response
-    deactivate API
+
+    Kafka ->> Proxy: получения сообщений
+    activate Proxy
+    Proxy ->> LMS: обновления значений
+    activate LMS
+    LMS -->> Proxy: OK
+    deactivate LMS
+    Proxy -->> Kafka: Offset commit
+    deactivate Proxy
 ```
+#### Оценка атрибутов качества
 
-### Редактирование работы
+Взаимодействие с LMS осуществляется через Proxy, который в свою очередь взаимодействует с backend нашей системы через кафку. Сделано чтобы максимально развязать наш основной backend от сложной legacy LMS системы университета
+
+Надежность: 
+Сценарии сбоев
+Proxy упал
+LMS недоступен
+
+Производительность: 
+- узкое место Proxy
+- узкое место LMS
+
+Можно решить через балансировку и несколько инстансов Proxy
+
+Модифицируемость: 
+- изменение взаимодействия с LMS затронут только Proxy
+
+### Проверка работы на антиплагиат в TurnitIn
 
 ```mermaid
 sequenceDiagram
-    participant USR as User Service
-    participant S3 as Object storage Service
-    participant API as API Proxy Service
-    participant Backend as Backend Service
+      participant Db as PostgresDb
+    participant Backend as Backend Service Scheduler
+    participant Kafka as Kafka
+    participant Validation as Validation Service
+    participant TurnitIn as TurnitIn
 
-    USR->>S3: Получение работы для редактирования из обьектного хранилища по ID
-    activate S3
-    S3-->>USR: OK data stream
-    deactivate S3
-    USR->>USR: редактирование работы
-    USR->>S3: Загрузка отредактированной работы в обьектное хранилище
-    activate S3
-    S3-->>USR: OK , возвращает ID загруженного обьекта
-    deactivate S3
-    USR->>API: POST request
-    activate API
-    API->>Backend: data stream
+    Backend ->> Db: получения списка работ для проверки
     activate Backend
-    Backend-->>API: OK
+    activate Db
+    Db -->> Backend: ОК
+    deactivate Db
+
+    Backend ->> Kafka: отправка сообщений
+    Kafka -->> Backend: OK
     deactivate Backend
-    API-->>USR: OK Response
-    deactivate API
+
+    Kafka ->> Validation: получения сообщений
+    activate Validation
+    Validation ->> TurnitIn: обновления значений
+    activate TurnitIn
+    TurnitIn -->> Validation: OK
+    deactivate TurnitIn
+    Validation -->> Kafka: Offset commit
+    deactivate Validation
+
+
 ```
 
 #### Оценка атрибутов качества
 
-2 сценария выше реализованны чуть сложнее, добавляется обьектное хранилище так как предпологается что выполненная работа может занимать много места и в связи с возможными ограничениями сети ее необходимо хранить в файлом хранилище
+Взаимодействие с TurnitIn осуществляется через Validation Service, который в свою очередь взаимодействует с backend нашей системы через кафку. Сделано чтобы максимально развязать наш основной backend от внешней системы TurnitIn
 
 Надежность: 
 Сценарии сбоев
-все те же что и выше + возможные проблемы с сервисом файлового хранилища
+TurnitIn упал
+Validation Service недоступен
 
 Производительность: 
-- узкое место в БД
-- узкое место в сети
+- узкое место Proxy
+- узкое место TurnitIn
 
-Можно решить через создание реплик master/slave, балансировкой
+Можно решить через балансировку и несколько инстансов Validation Service
 
 Модифицируемость: 
-- изменение фильтров поиска на UI
-тут ось изменений пройдет через API Proxy и User service
-- изменения на стороне бэка
-изменения затронут только backend service
+- изменение взаимодействия с TurnitIn затронут только Validation Service
